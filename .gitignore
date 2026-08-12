@@ -1,0 +1,38 @@
+# Dependencies
+node_modules/
+*/node_modules/
+
+# Environment files — NEVER COMMIT THESE
+.env
+backend/.env
+frontend/.env
+*.env.local
+*.env.production.reference
+
+# Sensitive data files
+database.md
+
+# Build output
+dist/
+build/
+*/dist/
+
+# Logs
+*.log
+logs/
+npm-debug.log*
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+
+# Test coverage
+coverage/
+
+# Temporary
+*.tmp
+*.temp

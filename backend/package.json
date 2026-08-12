@@ -1,0 +1,31 @@
+{
+  "name": "skills-agent-backend",
+  "version": "1.0.0",
+  "description": "Backend for the Dynamic User-Defined Skills Agent Platform",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "nodemon src/index.js",
+    "test": "jest --runInBand --forceExit",
+    "seed": "node src/seeds/demoSkill.js"
+  },
+  "dependencies": {
+    "@google/genai": "^1.0.0",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "mathjs": "^13.1.1",
+    "mongoose": "^8.5.1",
+    "express-async-errors": "^3.1.1"
+  },
+  "devDependencies": {
+    "jest": "^29.7.0",
+    "nodemon": "^3.1.4",
+    "supertest": "^7.0.0"
+  },
+  "jest": {
+    "testEnvironment": "node",
+    "rootDir": ".",
+    "testMatch": ["**/tests/**/*.test.js"]
+  }
+}
