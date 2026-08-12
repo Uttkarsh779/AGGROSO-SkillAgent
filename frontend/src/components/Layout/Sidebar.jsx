@@ -22,7 +22,8 @@ function BackendStatus() {
     let mounted = true
     const check = async () => {
       try {
-        const res = await fetch('http://localhost:5000/api/health', {
+        const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+        const res = await fetch(`${baseUrl}/api/health`, {
           signal: AbortSignal.timeout(3000),
         })
         if (mounted) setStatus(res.ok ? 'connected' : 'offline')
