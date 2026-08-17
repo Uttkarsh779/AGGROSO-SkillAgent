@@ -6,6 +6,8 @@ const Execution = require('../models/Execution');
 const { validateSkillForPublish } = require('../validators/skillValidator');
 const { runAgentLoop } = require('../engine/agentEngine');
 
+const { normalizeToCanonicalSchema } = require('../validators/schemaBuilder');
+
 // GET /api/skills — list all skills with their latest version
 router.get('/', async (req, res) => {
   const skills = await Skill.find().sort({ updatedAt: -1 });
@@ -22,7 +24,7 @@ router.get('/', async (req, res) => {
 
 // POST /api/skills — create a new skill (creates v1 as draft)
 router.post('/', async (req, res) => {
-  const { name, purpose, inputSchema, outputSchema, instructions, examples, allowedTools, approvalRequiredActions, maxSteps } = req.body;
+  const { name, purpose, inputSchema, outputSchema, inputFields, outputFields, instructions, examples, allowedTools, approvalRequiredActions, maxSteps } = req.body;
 
   if (!name || !purpose) {
     return res.status(400).json({ error: 'name and purpose are required' });
@@ -30,12 +32,15 @@ router.post('/', async (req, res) => {
 
   const skill = await Skill.create({ name, purpose });
 
+  const canonicalInputSchema = normalizeToCanonicalSchema(inputFields || inputSchema);
+  const canonicalOutputSchema = normalizeToCanonicalSchema(outputFields || outputSchema);
+
   const version = await SkillVersion.create({
     skillId: skill._id,
     versionNumber: 1,
     status: 'draft',
-    inputSchema: inputSchema || { type: 'object', properties: {} },
-    outputSchema: outputSchema || { type: 'object', properties: {} },
+    inputSchema: canonicalInputSchema,
+    outputSchema: canonicalOutputSchema,
     instructions: instructions || '',
     examples: examples || [],
     allowedTools: allowedTools || [],
@@ -64,7 +69,7 @@ router.put('/:id', async (req, res) => {
   const skill = await Skill.findById(req.params.id);
   if (!skill) return res.status(404).json({ error: 'Skill not found' });
 
-  const { name, purpose, inputSchema, outputSchema, instructions, examples, allowedTools, approvalRequiredActions, maxSteps } = req.body;
+  const { name, purpose, inputSchema, outputSchema, inputFields, outputFields, instructions, examples, allowedTools, approvalRequiredActions, maxSteps } = req.body;
 
   // Update skill metadata
   if (name) skill.name = name;
@@ -76,6 +81,14 @@ router.put('/:id', async (req, res) => {
     versionNumber: -1,
   });
 
+  const canonicalInputSchema = (inputFields || inputSchema !== undefined)
+    ? normalizeToCanonicalSchema(inputFields || inputSchema)
+    : latestVersion?.inputSchema || { type: 'object', properties: {} };
+
+  const canonicalOutputSchema = (outputFields || outputSchema !== undefined)
+    ? normalizeToCanonicalSchema(outputFields || outputSchema)
+    : latestVersion?.outputSchema || { type: 'object', properties: {} };
+
   let version;
   if (!latestVersion || latestVersion.status === 'published') {
     // Create a new draft version
@@ -84,8 +97,8 @@ router.put('/:id', async (req, res) => {
       skillId: skill._id,
       versionNumber: newVersionNumber,
       status: 'draft',
-      inputSchema: inputSchema || latestVersion?.inputSchema || { type: 'object', properties: {} },
-      outputSchema: outputSchema || latestVersion?.outputSchema || { type: 'object', properties: {} },
+      inputSchema: canonicalInputSchema,
+      outputSchema: canonicalOutputSchema,
       instructions: instructions || latestVersion?.instructions || '',
       examples: examples !== undefined ? examples : latestVersion?.examples || [],
       allowedTools: allowedTools || latestVersion?.allowedTools || [],
@@ -94,8 +107,8 @@ router.put('/:id', async (req, res) => {
     });
   } else {
     // Update the existing draft
-    if (inputSchema !== undefined) latestVersion.inputSchema = inputSchema;
-    if (outputSchema !== undefined) latestVersion.outputSchema = outputSchema;
+    if (inputFields !== undefined || inputSchema !== undefined) latestVersion.inputSchema = canonicalInputSchema;
+    if (outputFields !== undefined || outputSchema !== undefined) latestVersion.outputSchema = canonicalOutputSchema;
     if (instructions !== undefined) latestVersion.instructions = instructions;
     if (examples !== undefined) latestVersion.examples = examples;
     if (allowedTools !== undefined) latestVersion.allowedTools = allowedTools;

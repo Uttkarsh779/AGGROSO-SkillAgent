@@ -61,6 +61,59 @@ describe('Policy Checker — Tool Authorization', () => {
   });
 });
 
+describe('Policy Checker — Multi-Skill Authorization Isolation (Security Test)', () => {
+  const skillA = {
+    name: 'Customer Issue Resolver',
+    allowedTools: ['document_search', 'record_lookup', 'mock_task_creator'],
+    approvalRequiredActions: ['mock_task_creator'],
+    maxSteps: 8,
+  };
+
+  const skillB = {
+    name: 'Internal Policy Assistant',
+    allowedTools: ['document_search'],
+    approvalRequiredActions: [],
+    maxSteps: 5,
+  };
+
+  test('Skill A is permitted to use document_search, record_lookup, and mock_task_creator', () => {
+    const checkDoc = checkToolCallPolicy({ toolName: 'document_search', skillVersion: skillA, execution: runningExecution });
+    const checkRec = checkToolCallPolicy({ toolName: 'record_lookup', skillVersion: skillA, execution: runningExecution });
+    const checkTask = checkToolCallPolicy({ toolName: 'mock_task_creator', skillVersion: skillA, execution: runningExecution });
+
+    expect(checkDoc.allowed).toBe(true);
+    expect(checkRec.allowed).toBe(true);
+    expect(checkTask.allowed).toBe(true);
+  });
+
+  test('Skill B is permitted to use document_search', () => {
+    const checkDoc = checkToolCallPolicy({ toolName: 'document_search', skillVersion: skillB, execution: runningExecution });
+    expect(checkDoc.allowed).toBe(true);
+  });
+
+  test('Backend Policy Checker strictly REJECTS mock_task_creator attempt from Skill B', () => {
+    const checkUnauthorizedTask = checkToolCallPolicy({
+      toolName: 'mock_task_creator',
+      skillVersion: skillB,
+      execution: runningExecution,
+    });
+
+    expect(checkUnauthorizedTask.allowed).toBe(false);
+    expect(checkUnauthorizedTask.reason).toMatch(/not authorized for this skill/i);
+  });
+
+  test('Backend Policy Checker strictly REJECTS record_lookup attempt from Skill B', () => {
+    const checkUnauthorizedLookup = checkToolCallPolicy({
+      toolName: 'record_lookup',
+      skillVersion: skillB,
+      execution: runningExecution,
+    });
+
+    expect(checkUnauthorizedLookup.allowed).toBe(false);
+    expect(checkUnauthorizedLookup.reason).toMatch(/not authorized for this skill/i);
+  });
+});
+
 describe('Policy Checker — Approval Check', () => {
   const skillWithApproval = {
     allowedTools: ['mock_task_creator'],

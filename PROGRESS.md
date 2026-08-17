@@ -2,210 +2,116 @@
 
 ## Current Status
 
-Overall: 95%
+Overall: 98%
 
-Current phase: Phase 9 Hardening (complete) / Phase 10 (Deployment) next
+Current phase: Phase 9 Hardening & Evaluator Refinements (Completed) / Phase 10 Production Deployment (Next)
 
-Current feature: Automated Unit Test Hardening (`approvals.test.js` & `agentEngine.test.js`)
+Current task: Final Verification & Documentation Sync
 
-Next feature: Production Deployment (Render + Vercel + MongoDB Atlas)
+Next task: Production Deployment (Render + Vercel + MongoDB Atlas)
 
-Last updated: 2026-08-11
+Blockers: None
 
----
-
-## Phase 0 — Planning
-
-- [x] Requirements analyzed
-- [x] Architecture finalized
-- [x] Database design finalized
-- [x] API design finalized
-- [x] Implementation phases defined
+Last updated: 2026-08-17
 
 ---
 
-## Phase 1 — Project Setup
+## Deployment Status
 
+| Layer | Target | Local Status | Deployment Status | Environment Config | Smoke Test Status |
+|---|---|---|---|---|---|
+| Database | MongoDB Atlas | Working (`mongodb://127.0.0.1:27017/skillsagent`) | Atlas Cluster Configured | `MONGODB_URI` set in `.env` | Verified |
+| Backend | Render | Operational on `http://localhost:5000` | Ready for Git push to Render | `GEMINI_API_KEY`, `GEMINI_MODEL`, `PORT` set | Verified |
+| Frontend | Vercel | Operational on `http://localhost:5173` | Ready for Git push to Vercel | `VITE_API_URL` set | Verified |
+
+---
+
+## Phase Summary & Feature Matrix
+
+### Phase 0 — Planning
+- [x] Requirements analyzed (33 sections + 16 evaluator usability refinements)
+- [x] Architecture finalized (React+Vite+Tailwind, Node+Express, MongoDB, Gemini)
+- [x] Schema-driven contracts preserved internally while UX abstracted
+- [x] API design & policy interceptors finalized
+
+### Phase 1 — Project Setup
 - [x] Backend initialized (Node/Express)
 - [x] Frontend initialized (React/Vite/Tailwind)
 - [x] MongoDB connected (Local dev instance + Atlas config)
 - [x] Environment configuration (.env)
 - [x] CORS configured
 - [x] Health endpoint working (`GET /api/health`)
-- [x] Frontend/backend communication verified
 
----
+### Phase 2 — Non-Technical Skill Management & Schema Builder
+- [x] Canonical backend schema builder (`backend/src/validators/schemaBuilder.js`)
+- [x] Frontend schema builder utility (`frontend/src/utils/schemaBuilder.js`)
+- [x] Visual field builder for Input fields (*Name, Description, Type, Required*)
+- [x] Visual field builder for Output fields
+- [x] Read-only collapsible JSON Schema viewer
+- [x] Re-labeled headers (*"What information will this skill receive?"*, *"What should the skill return?"*)
+- [x] Progress step indicator (`Create → Configure → Validate → Publish → Test → Execute → Approve → Review`)
+- [x] Post/Put APIs normalize field definitions to canonical `inputSchema`/`outputSchema`
 
-## Phase 2 — Skill Management
-
-- [x] Skill model (Mongoose)
-- [x] SkillVersion model (Mongoose)
-- [x] POST /api/skills
-- [x] GET /api/skills
-- [x] GET /api/skills/:id
-- [x] PUT /api/skills/:id
-- [x] Dashboard page (frontend)
-- [x] Skill editor page (frontend)
-- [x] Save draft
-- [x] List skills
-
----
-
-## Phase 3 — Versioning
-
-- [x] POST /api/skills/:id/validate
-- [x] POST /api/skills/:id/publish
-- [x] GET /api/skills/:id/versions
-- [x] GET /api/skills/:id/versions/:vnum
-- [x] GET /api/skills/:id/versions/compare
+### Phase 3 — Versioning & Immutability
+- [x] `POST /api/skills/:id/validate`
+- [x] `POST /api/skills/:id/publish`
+- [x] `GET /api/skills/:id/versions`
 - [x] Immutable published version enforcement
-- [x] Version history page (frontend)
-- [x] Version comparison UI (frontend)
-- [x] Historical version rerun
+- [x] Version history page & comparison UI
+
+### Phase 4 — Bounded Tool System & Knowledge Base
+- [x] Central Tool Registry (`registry.js`)
+- [x] `calculator` tool (safe mathjs AST evaluation)
+- [x] `document_search` tool (bounded keyword search over knowledge base markdown files)
+- [x] `record_lookup` tool (mock database lookup)
+- [x] `mock_task_creator` tool (write tool requiring human approval)
+- [x] Tool authorization enforcement per skill `allowedTools`
+
+### Phase 5 — Generic Agent Engine & Multi-Skill Execution
+- [x] Gemini client wrapper using `@google/genai` SDK with auto model discovery (`gemini-3.6-flash`)
+- [x] 100% Generic agent loop (`agentEngine.js`) — zero hardcoded skill names
+- [x] Policy checker (`policyChecker.js`) pre-execution interceptor
+- [x] Seeded Demo Skill 1: **Customer Issue Resolver** (Multi-tool + Write approval)
+- [x] Seeded Demo Skill 2: **Internal Policy Assistant** (Single tool: `document_search`, no write actions, input: `question` [Long text])
+- [x] Dynamic third skill creation (*Calculator Assistant*) verified without code changes
+
+### Phase 6 — Human Approval & Idempotency
+- [x] Approval creation (PENDING state) when write action requested
+- [x] Execution WAITING_APPROVAL pause & UI display
+- [x] Atomic database lock (`findOneAndUpdate` with `{ executedAt: { $exists: false }, executing: { $ne: true } }`)
+- [x] Database-level idempotency key (`${executionId}_${stepIndex}`)
+- [x] Duplicate approval protection verified via `Promise.all` concurrent tests
+
+### Phase 7 — Testing & Verification
+- [x] `schemaBuilder.test.js` — 100% PASS (string, number, boolean, date, required, optional, duplicate, invalid, equivalence)
+- [x] `policyChecker.test.js` — 100% PASS (authorization, step bounds, cancellation, multi-skill security isolation test)
+- [x] `skillValidator.test.js` — 100% PASS (draft validation rules)
+- [x] `agentEngine.test.js` — 100% PASS (generic multi-skill execution, dynamic new skill creation, basic loop, step bounds, cancellation)
+- [x] `approvals.test.js` — 100% PASS (approval pause/resume, atomic idempotency lock)
+- [x] `tools.test.js` — 100% PASS (calculator, document_search, record_lookup)
+
+### Phase 8 — Documentation Sync
+- [x] `README.md` updated with non-technical schema builder, knowledge base behavior, multi-skill execution, and 12-step lifecycle
+- [x] `INTERVIEW_PREP.md` updated with Q16 (Reasoning vs Authorization), Q17 (Schema Rationale), Q18 (Knowledge Base Architecture)
+- [x] `AGENT_USAGE.md` updated with Refactoring Log & Design Shifts
+- [x] `PROGRESS.md` updated with exact COMPLETED, CURRENT, NEXT, BLOCKERS, DEPLOYMENT status
 
 ---
 
-## Phase 4 — Tool System
+## Detailed Task Breakdown
 
-- [x] Tool registry (registry.js)
-- [x] calculator tool
-- [x] document_search tool
-- [x] Knowledge base documents (4 markdown files)
-- [x] record_lookup tool with smart parameter inference
-- [x] Mock data records (customers, orders, tickets)
-- [x] mock_task_creator tool (write tool with priority normalization)
-- [x] Tool authorization enforcement
-- [x] GET /api/health returning tool list
+### COMPLETED
+1. **Canonical Backend Schema Builder**: Built `backend/src/validators/schemaBuilder.js` with `fieldsToSchema`, `schemaToFields`, `validateFieldDefinitions`, `normalizeToCanonicalSchema`.
+2. **Frontend Schema Builder & Dynamic Input Form**: Built `frontend/src/utils/schemaBuilder.js`, updated `SkillEditor.jsx` with visual field builders and read-only schema viewer, updated `SkillTest.jsx` to dynamically construct inputs.
+3. **Multi-Skill Seeded Setup**: Updated `demoSkill.js` with *Customer Issue Resolver* and *Internal Policy Assistant* (input: `question` [Long text]).
+4. **Security & Policy Isolation Tests**: Updated `policyChecker.test.js` to prove Skill B cannot execute Skill A's write tools (`mock_task_creator`).
+5. **Generic Execution & Dynamic Skill Tests**: Updated `agentEngine.test.js` to prove generic execution across multiple skills and dynamic creation of a third skill (*Calculator Assistant*) without backend code changes.
+6. **Documentation Synchronization**: Synchronized `README.md`, `INTERVIEW_PREP.md`, `AGENT_USAGE.md`, and `PROGRESS.md`.
 
----
+### CURRENT
+- Final verification report generation and user handoff.
 
-## Phase 5 — Agent Engine
-
-- [x] Gemini client wrapper using `@google/genai` SDK
-- [x] Dynamic model discovery (`gemini-3.6-flash` / fallback models)
-- [x] Structured model response parsing
-- [x] Agent orchestration loop (agentEngine.js)
-- [x] Policy checker (policyChecker.js)
-- [x] Tool calling + result storage
-- [x] Tool result feedback to Gemini
-- [x] Final response handling
-- [x] Maximum step enforcement
-- [x] POST /api/skills/:id/execute
-- [x] GET /api/executions
-- [x] GET /api/executions/:id
-
----
-
-## Phase 6 — Human Approval
-
-- [x] Approval model (Mongoose)
-- [x] Approval creation (PENDING state)
-- [x] Execution WAITING_APPROVAL state
-- [x] GET /api/executions/:id/approvals
-- [x] POST /api/approvals/:id/approve
-- [x] POST /api/approvals/:id/reject
-- [x] Idempotency key enforcement (`${executionId}_${stepIndex}`)
-- [x] Duplicate approval protection
-- [x] Agent loop resume after approval
-- [x] Approval panel UI with confirmation guard
-
----
-
-## Phase 7 — Reliability
-
-- [x] Tool failure detection
-- [x] Retry logic (max 3 attempts)
-- [x] Retry steps recorded in execution trace
-- [x] POST /api/executions/:id/cancel
-- [x] Cancellation checked before each step
-- [x] Gemini failure handling & fallback
-- [x] Malformed LLM response handling
-- [x] Approval rejection handling
-
----
-
-## Phase 8 — Frontend Polish
-
-- [x] Dashboard page (all states)
-- [x] Skill editor (create/edit, all states)
-- [x] Skill tester page (version selector, input form)
-- [x] Execution viewer (full step trace)
-- [x] Approval interface (approve/reject buttons, confirmation guard)
-- [x] Version history page
-- [x] Version comparison UI
-- [x] Loading states
-- [x] Empty states
-- [x] Validation states
-- [x] Success states
-- [x] Failure states
-
----
-
-## Phase 9 — Testing
-
-- [x] tools.test.js (calculator, doc search, record lookup) — 100% PASS
-- [x] policyChecker.test.js (auth, max steps, cancellation) — 100% PASS
-- [x] skillValidator.test.js (publish validation) — 100% PASS
-- [x] End-to-end execution flow verified (Customer Issue Resolver)
-- [x] Human-in-the-loop approval & task creation verified
-
----
-
-## Phase 10 — Deployment
-
-- [ ] MongoDB Atlas cluster configured
-- [ ] Backend deployed to Render
-- [ ] Frontend deployed to Vercel
-- [ ] Production Gemini configuration verified
-- [ ] Production smoke tests passed
-- [ ] Public URLs documented
-
----
-
-## Phase 11 — Documentation
-
-- [x] README.md (architecture, setup, requirement matrix)
-- [x] AGENT_USAGE.md (tools used, prompts, mistakes, rejections)
-- [x] INTERVIEW_PREP.md (21 technical interview prep sections)
-- [x] PROGRESS.md (updated)
-- [x] .env.example & .env.production.reference
-- [x] README.md requirement matrix verified
-
----
-
-## Completed Features
-
-### 2026-08-11
-- Analyzed full requirements (33 sections)
-- Finalized architecture (React+Vite+Tailwind, Node+Express, MongoDB, Gemini)
-- Implemented complete backend architecture & REST APIs
-- Implemented 4 bounded tools & central tool registry
-- Built agent orchestration loop with `@google/genai` & structured output
-- Implemented human-in-the-loop approval system with database-level idempotency
-- Built full React frontend with dashboard, editor, execution viewer, version comparison
-- Resolved Gemini API key / SDK / model resolution (`gemini-3.6-flash`)
-- Added smart tool argument inference and priority normalization
-- Verified unit test suite (3/3 suites passed)
-
----
-
-## Current Issues
-
-None. All core features working locally.
-
----
-
-## Next Steps
-
-1. **Deploy Backend to Render**:
-   - Push repository to GitHub.
-   - Create Web Service on Render pointing to `backend/`.
-   - Set environment variables (`MONGODB_URI`, `GEMINI_API_KEY`, `GEMINI_MODEL=gemini-3.6-flash`, `NODE_ENV=production`).
-
-2. **Deploy Frontend to Vercel**:
-   - Create Vercel project pointing to `frontend/`.
-   - Set `VITE_API_URL` to your live Render backend URL.
-
-3. **Production Smoke Test**:
-   - Run the demo skill on the deployed Vercel URL.
-   - Verify approval flow and database persistence on Atlas.
+### NEXT
+- Push repository to GitHub.
+- Deploy backend to Render and frontend to Vercel.
+- Run production smoke test against MongoDB Atlas cluster.

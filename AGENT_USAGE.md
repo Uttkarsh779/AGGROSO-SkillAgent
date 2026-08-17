@@ -91,6 +91,11 @@ Phase 6 - Implement the human approval system. Create Approval model, pause/resu
 **Why rejected**: In a multi-tenant or concurrent environment, two simultaneous requests could bypass the in-memory check and create duplicate tasks in MongoDB.
 **Resolution**: Implemented atomic database-level claim (`findOneAndUpdate` with `{ executedAt: { $exists: false }, executing: { $ne: true } }`) so only one concurrent request acquires the execution lock. Verified via `Promise.all` test in `approvals.test.js`.
 
+### Mistake 6 — Exposing Raw JSON Schema Textareas to Non-Technical Evaluators
+**What happened**: Agent initially provided raw JSON textareas (`JSON.stringify({}, null, 2)`) in the Skill Editor and Skill Tester UI.
+**Why rejected**: Requiring evaluators to write raw JSON Schema introduces UX friction and formatting syntax errors.
+**Resolution**: Built a visual form-based Field Builder (*Field Name, Description, Type, Required*) in the frontend with authoritative backend schema normalization in `schemaBuilder.js`. Generated JSON Schema is stored canonically in `SkillVersion` and inspectable via a read-only collapsible viewer.
+
 ---
 
 ## Rejected Suggestions

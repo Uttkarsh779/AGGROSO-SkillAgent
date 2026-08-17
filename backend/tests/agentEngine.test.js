@@ -7,6 +7,8 @@ const Approval = require('../src/models/Approval');
 const { runAgentLoop } = require('../src/engine/agentEngine');
 const geminiClient = require('../src/engine/geminiClient');
 const { approve } = require('../src/engine/approvalManager');
+const { validateSkillForPublish } = require('../src/validators/skillValidator');
+const { fieldsToSchema } = require('../src/validators/schemaBuilder');
 
 // Mock geminiClient.callGemini for deterministic offline testing
 jest.mock('../src/engine/geminiClient', () => {
@@ -65,8 +67,6 @@ describe('Agent Engine Suite (Deterministic Mocks)', () => {
       status: 'RUNNING',
     });
 
-    // Mock Gemini step 1: tool_call -> record_lookup
-    // Mock Gemini step 2: final output
     geminiClient.callGemini
       .mockResolvedValueOnce({
         type: 'tool_call',
@@ -88,7 +88,6 @@ describe('Agent Engine Suite (Deterministic Mocks)', () => {
   });
 
   test('Test 12 — Tool Authorization Check (Unauthorized tool call blocked)', async () => {
-    // Create version that ONLY allows calculator
     const restrictedVersion = await SkillVersion.create({
       skillId: sampleSkill._id,
       versionNumber: 2,
@@ -106,7 +105,6 @@ describe('Agent Engine Suite (Deterministic Mocks)', () => {
       status: 'RUNNING',
     });
 
-    // Gemini attempts to call mock_task_creator which is NOT allowed by version 2
     geminiClient.callGemini
       .mockResolvedValueOnce({
         type: 'tool_call',
@@ -124,12 +122,10 @@ describe('Agent Engine Suite (Deterministic Mocks)', () => {
     const finalExec = await Execution.findById(execution._id);
     expect(finalExec.status).toBe('COMPLETED');
     
-    // Verify policy error step was recorded
     const errorStep = finalExec.steps.find((s) => s.type === 'error');
     expect(errorStep).toBeDefined();
     expect(errorStep.error).toMatch(/not authorized for this skill/i);
 
-    // Verify task was NOT created in DB
     const taskCount = await CreatedTask.countDocuments({ executionId: execution._id });
     expect(taskCount).toBe(0);
   });
@@ -143,7 +139,6 @@ describe('Agent Engine Suite (Deterministic Mocks)', () => {
       status: 'RUNNING',
     });
 
-    // Gemini requests unregistered tool send_email
     geminiClient.callGemini
       .mockResolvedValueOnce({
         type: 'tool_call',
@@ -161,14 +156,12 @@ describe('Agent Engine Suite (Deterministic Mocks)', () => {
     const finalExec = await Execution.findById(execution._id);
     expect(finalExec.status).toBe('COMPLETED');
 
-    // Verify error step recorded
     const errorStep = finalExec.steps.find((s) => s.type === 'error');
     expect(errorStep).toBeDefined();
     expect(errorStep.error).toMatch(/does not exist in the tool registry/i);
   });
 
   test('Test 14 — Maximum Steps Enforcement', async () => {
-    // Create version with maxSteps = 2
     const shortVersion = await SkillVersion.create({
       skillId: sampleSkill._id,
       versionNumber: 3,
@@ -186,7 +179,6 @@ describe('Agent Engine Suite (Deterministic Mocks)', () => {
       status: 'RUNNING',
     });
 
-    // Gemini keeps requesting tool calls
     geminiClient.callGemini.mockResolvedValue({
       type: 'tool_call',
       tool: 'calculator',
@@ -212,7 +204,6 @@ describe('Agent Engine Suite (Deterministic Mocks)', () => {
 
     await runAgentLoop(execution._id.toString());
 
-    // Gemini should never be called if execution is pre-cancelled
     expect(geminiClient.callGemini).not.toHaveBeenCalled();
 
     const finalExec = await Execution.findById(execution._id);
@@ -249,7 +240,6 @@ describe('Agent Engine Suite (Deterministic Mocks)', () => {
       status: 'RUNNING',
     });
 
-    // Step 1: Gemini requests mock_task_creator (write tool requiring approval)
     geminiClient.callGemini.mockResolvedValueOnce({
       type: 'tool_call',
       tool: 'mock_task_creator',
@@ -259,20 +249,16 @@ describe('Agent Engine Suite (Deterministic Mocks)', () => {
 
     await runAgentLoop(execution._id.toString());
 
-    // Verify execution paused at WAITING_APPROVAL
     let currentExec = await Execution.findById(execution._id);
     expect(currentExec.status).toBe('WAITING_APPROVAL');
 
-    // Verify ZERO tasks created in DB prior to human approval
     let taskCount = await CreatedTask.countDocuments({ executionId: execution._id });
     expect(taskCount).toBe(0);
 
-    // Get pending approval
     const approval = await Approval.findOne({ executionId: execution._id });
     expect(approval).toBeDefined();
     expect(approval.status).toBe('PENDING');
 
-    // Step 2: Human approves
     geminiClient.callGemini.mockResolvedValueOnce({
       type: 'final',
       output: 'Support task created successfully and assigned to billing team.',
@@ -281,8 +267,172 @@ describe('Agent Engine Suite (Deterministic Mocks)', () => {
     const { result } = await approve(approval._id);
     expect(result.taskId).toBeDefined();
 
-    // Verify EXACTLY ONE task created in DB after approval
     taskCount = await CreatedTask.countDocuments({ executionId: execution._id });
     expect(taskCount).toBe(1);
+  });
+});
+
+describe('Generic Multi-Skill Execution (Requirement 6)', () => {
+  let skillA, versionA, skillB, versionB;
+
+  beforeEach(async () => {
+    jest.clearAllMocks();
+    await Execution.deleteMany({});
+    await Skill.deleteMany({});
+    await SkillVersion.deleteMany({});
+
+    // Skill A: Customer Issue Resolver (Multi-tool + Approval write action)
+    skillA = await Skill.create({
+      name: 'Customer Issue Resolver',
+      purpose: 'Resolve customer issues and create support tasks',
+    });
+    versionA = await SkillVersion.create({
+      skillId: skillA._id,
+      versionNumber: 1,
+      status: 'published',
+      instructions: 'Investigate customer complaint and create support task if needed.',
+      allowedTools: ['record_lookup', 'document_search', 'mock_task_creator'],
+      approvalRequiredActions: ['mock_task_creator'],
+      maxSteps: 8,
+    });
+
+    // Skill B: Internal Policy Assistant (Single tool: document_search only, no write actions)
+    skillB = await Skill.create({
+      name: 'Internal Policy Assistant',
+      purpose: 'Answer employee policy queries using document search',
+    });
+    versionB = await SkillVersion.create({
+      skillId: skillB._id,
+      versionNumber: 1,
+      status: 'published',
+      instructions: 'Answer questions about company policies using document_search only.',
+      allowedTools: ['document_search'],
+      approvalRequiredActions: [],
+      maxSteps: 5,
+    });
+  });
+
+  test('Executes Skill A and Skill B through the exact same agent engine without skill name branching', async () => {
+    // Execution for Skill A
+    const execA = await Execution.create({
+      skillId: skillA._id,
+      skillVersionId: versionA._id,
+      versionNumber: 1,
+      input: { customerId: 'C102', complaint: 'Payment deducted' },
+      status: 'RUNNING',
+    });
+
+    geminiClient.callGemini
+      .mockResolvedValueOnce({
+        type: 'tool_call',
+        tool: 'record_lookup',
+        arguments: { collection: 'customers', id: 'C102' },
+        reason: 'Check customer record',
+      })
+      .mockResolvedValueOnce({
+        type: 'tool_call',
+        tool: 'document_search',
+        arguments: { query: 'billing refund policy' },
+        reason: 'Search refund policy',
+      })
+      .mockResolvedValueOnce({
+        type: 'tool_call',
+        tool: 'mock_task_creator',
+        arguments: { title: 'Refund task C102', description: 'Process refund', priority: 'high' },
+        reason: 'Create refund task',
+      });
+
+    await runAgentLoop(execA._id.toString());
+    const resA = await Execution.findById(execA._id);
+    expect(resA.status).toBe('WAITING_APPROVAL');
+
+    // Execution for Skill B through identical engine
+    const execB = await Execution.create({
+      skillId: skillB._id,
+      skillVersionId: versionB._id,
+      versionNumber: 1,
+      input: { question: 'What is the refund policy for billing errors?' },
+      status: 'RUNNING',
+    });
+
+    geminiClient.callGemini
+      .mockResolvedValueOnce({
+        type: 'tool_call',
+        tool: 'document_search',
+        arguments: { query: 'billing refund policy' },
+        reason: 'Search billing policy document',
+      })
+      .mockResolvedValueOnce({
+        type: 'final',
+        output: 'Per billing policy, refunds for failed orders are processed within 24 hours.',
+      });
+
+    await runAgentLoop(execB._id.toString());
+    const resB = await Execution.findById(execB._id);
+    expect(resB.status).toBe('COMPLETED');
+    expect(resB.finalOutput).toMatch(/refunds for failed orders are processed/i);
+  });
+});
+
+describe('Dynamic Creation of Completely New Skill (Requirement 7)', () => {
+  test('User creates, validates, publishes, and executes a third skill (Simple Calculator Assistant) without backend code changes', async () => {
+    // STEP 1 — Create Draft
+    const skill = await Skill.create({
+      name: 'Simple Calculator Assistant',
+      purpose: 'Evaluate math calculations accurately',
+    });
+
+    const inputFields = [{ name: 'expression', description: 'Math expression', type: 'Text', required: true }];
+    const outputFields = [{ name: 'result', description: 'Calculation result', type: 'Number', required: true }];
+
+    const version = await SkillVersion.create({
+      skillId: skill._id,
+      versionNumber: 1,
+      status: 'draft',
+      inputSchema: fieldsToSchema(inputFields),
+      outputSchema: fieldsToSchema(outputFields),
+      instructions: 'Calculate the math expression provided using the calculator tool.',
+      allowedTools: ['calculator'],
+      approvalRequiredActions: [],
+      maxSteps: 5,
+    });
+
+    // STEP 2 — Validate Draft
+    const validation = validateSkillForPublish(version);
+    expect(validation.valid).toBe(true);
+
+    // STEP 3 — Publish Version
+    version.status = 'published';
+    await version.save();
+    skill.status = 'published';
+    skill.currentVersion = 1;
+    await skill.save();
+
+    // STEP 4 — Execute New Skill through Generic Engine
+    const execution = await Execution.create({
+      skillId: skill._id,
+      skillVersionId: version._id,
+      versionNumber: 1,
+      input: { expression: '125 * 18' },
+      status: 'RUNNING',
+    });
+
+    geminiClient.callGemini
+      .mockResolvedValueOnce({
+        type: 'tool_call',
+        tool: 'calculator',
+        arguments: { expression: '125 * 18' },
+        reason: 'Multiply 125 by 18',
+      })
+      .mockResolvedValueOnce({
+        type: 'final',
+        output: 'The calculated result of 125 * 18 is 2250.',
+      });
+
+    await runAgentLoop(execution._id.toString());
+
+    const resultExec = await Execution.findById(execution._id);
+    expect(resultExec.status).toBe('COMPLETED');
+    expect(resultExec.finalOutput).toContain('2250');
   });
 });
